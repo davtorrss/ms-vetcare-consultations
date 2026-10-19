@@ -29,6 +29,26 @@ public class Consultation {
     @Column(nullable = false)
     private ConsultationStatus status;
 
+    /*
+     * OID del usuario Cliente dueño de la consulta.
+     *
+     * Se obtiene desde Microsoft Entra.
+     * Nunca se recibe libremente desde Angular/Postman.
+     *
+     * Puede ser null para consultas creadas por un Operador,
+     * ya que el modelo actual todavía no tiene una relación
+     * confiable Operador -> Cliente.
+     */
+    @Column(name = "owner_oid")
+    private String ownerOid;
+
+    /*
+     * Identidad de quien creó la consulta.
+     * También se obtiene desde el JWT.
+     */
+    @Column(name = "created_by_oid")
+    private String createdByOid;
+
     public Consultation() {
     }
 
@@ -37,13 +57,17 @@ public class Consultation {
             Long serviceId,
             LocalDateTime requestedAt,
             String observations,
-            ConsultationStatus status
+            ConsultationStatus status,
+            String ownerOid,
+            String createdByOid
     ) {
         this.petName = petName;
         this.serviceId = serviceId;
         this.requestedAt = requestedAt;
         this.observations = observations;
         this.status = status;
+        this.ownerOid = ownerOid;
+        this.createdByOid = createdByOid;
     }
 
     public Long getId() {
@@ -70,6 +94,14 @@ public class Consultation {
         return status;
     }
 
+    public String getOwnerOid() {
+        return ownerOid;
+    }
+
+    public String getCreatedByOid() {
+        return createdByOid;
+    }
+
     public void setId(Long id) {
         this.id = id;
     }
@@ -92,5 +124,13 @@ public class Consultation {
 
     public void setStatus(ConsultationStatus status) {
         this.status = status;
+    }
+
+    public void setOwnerOid(String ownerOid) {
+        this.ownerOid = ownerOid;
+    }
+
+    public void setCreatedByOid(String createdByOid) {
+        this.createdByOid = createdByOid;
     }
 }

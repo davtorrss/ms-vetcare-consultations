@@ -8,6 +8,8 @@ import com.duoc.ms_vetcare_consultations.entity.ConsultationStatus;
 import com.duoc.ms_vetcare_consultations.exception.InvalidStatusTransitionException;
 import com.duoc.ms_vetcare_consultations.exception.ResourceNotFoundException;
 import com.duoc.ms_vetcare_consultations.repository.ConsultationRepository;
+
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -27,15 +29,32 @@ public class ConsultationService {
     public List<ConsultationResponse> findAll(
             ConsultationStatus status,
             LocalDate from,
-            LocalDate to
+            LocalDate to,
+            String userOid,
+            boolean isClient
     ) {
 
         return repository.findAll()
                 .stream()
+
+                /*
+                 * Si es Cliente, solamente puede visualizar
+                 * consultas cuyo ownerOid coincida con su
+                 * identidad real de Microsoft Entra.
+                 */
+                .filter(consultation ->
+                        !isClient ||
+                        (
+                                consultation.getOwnerOid() != null &&
+                                consultation.getOwnerOid().equals(userOid)
+                        )
+                )
+
                 .filter(consultation ->
                         status == null ||
                         consultation.getStatus() == status
                 )
+
                 .filter(consultation ->
                         from == null ||
                         !consultation
@@ -43,6 +62,7 @@ public class ConsultationService {
                                 .toLocalDate()
                                 .isBefore(from)
                 )
+
                 .filter(consultation ->
                         to == null ||
                         !consultation
@@ -50,11 +70,16 @@ public class ConsultationService {
                                 .toLocalDate()
                                 .isAfter(to)
                 )
+
                 .map(ConsultationResponse::fromEntity)
                 .toList();
     }
 
-    public ConsultationResponse findById(Long id) {
+    public ConsultationResponse findById(
+            Long id,
+            String userOid,
+            boolean isClient
+    ) {
 
         Consultation consultation = repository.findById(id)
                 .orElseThrow(() ->
@@ -63,12 +88,45 @@ public class ConsultationService {
                         )
                 );
 
+        /*
+         * Un Cliente no puede consultar una atención
+         * perteneciente a otro usuario.
+         */
+        if (isClient) {
+
+            if (consultation.getOwnerOid() == null ||
+                    !consultation.getOwnerOid().equals(userOid)) {
+
+                throw new AccessDeniedException(
+                        "No tiene permiso para acceder a esta consulta"
+                );
+            }
+        }
+
         return ConsultationResponse.fromEntity(consultation);
     }
 
     public ConsultationResponse create(
-            CreateConsultationRequest request
+            CreateConsultationRequest request,
+            String userOid,
+            boolean isClient
     ) {
+
+        /*
+         * Si quien crea es Cliente:
+         *
+         * ownerOid = su propio OID.
+         *
+         * Nadie puede mandar ese valor desde el frontend.
+         *
+         * Si crea un Operador, por ahora ownerOid queda null,
+         * porque el modelo actual no tiene una relación
+         * confiable para determinar el Cliente propietario.
+         */
+        String ownerOid =
+                isClient
+                        ? userOid
+                        : null;
 
         Consultation consultation =
                 new Consultation(
@@ -76,7 +134,9 @@ public class ConsultationService {
                         request.getServiceId(),
                         request.getRequestedAt(),
                         request.getObservations(),
-                        ConsultationStatus.SOLICITADA
+                        ConsultationStatus.SOLICITADA,
+                        ownerOid,
+                        userOid
                 );
 
         Consultation saved =

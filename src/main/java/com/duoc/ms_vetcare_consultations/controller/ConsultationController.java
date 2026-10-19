@@ -10,6 +10,8 @@ import jakarta.validation.Valid;
 
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -39,41 +41,107 @@ public class ConsultationController {
 
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-            LocalDate to
+            LocalDate to,
+
+            @AuthenticationPrincipal
+            Jwt jwt
 
     ) {
+
+        String userOid =
+                jwt.getClaimAsString("oid");
+
+        boolean isClient =
+                hasRole(jwt, "Cliente");
 
         return service.findAll(
                 status,
                 from,
-                to
+                to,
+                userOid,
+                isClient
         );
     }
 
     @GetMapping("/{id}")
     public ConsultationResponse getConsultation(
-            @PathVariable Long id
+
+            @PathVariable Long id,
+
+            @AuthenticationPrincipal
+            Jwt jwt
+
     ) {
-        return service.findById(id);
+
+        String userOid =
+                jwt.getClaimAsString("oid");
+
+        boolean isClient =
+                hasRole(jwt, "Cliente");
+
+        return service.findById(
+                id,
+                userOid,
+                isClient
+        );
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public ConsultationResponse createConsultation(
+
             @Valid
             @RequestBody
-            CreateConsultationRequest request
+            CreateConsultationRequest request,
+
+            @AuthenticationPrincipal
+            Jwt jwt
+
     ) {
-        return service.create(request);
+
+        String userOid =
+                jwt.getClaimAsString("oid");
+
+        boolean isClient =
+                hasRole(jwt, "Cliente");
+
+        return service.create(
+                request,
+                userOid,
+                isClient
+        );
     }
 
     @PutMapping("/{id}/status")
     public ConsultationResponse updateStatus(
+
             @PathVariable Long id,
+
             @Valid
             @RequestBody
             UpdateStatusRequest request
+
     ) {
-        return service.updateStatus(id, request);
+
+        return service.updateStatus(
+                id,
+                request
+        );
+    }
+
+    /*
+     * Comprueba directamente los App Roles
+     * recibidos desde Microsoft Entra.
+     */
+    private boolean hasRole(
+            Jwt jwt,
+            String role
+    ) {
+
+        List<String> roles =
+                jwt.getClaimAsStringList("roles");
+
+        return roles != null &&
+                roles.contains(role);
     }
 }
