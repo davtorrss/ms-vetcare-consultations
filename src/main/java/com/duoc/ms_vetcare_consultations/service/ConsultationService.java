@@ -7,6 +7,7 @@ import com.duoc.ms_vetcare_consultations.entity.Consultation;
 import com.duoc.ms_vetcare_consultations.entity.ConsultationStatus;
 import com.duoc.ms_vetcare_consultations.exception.InvalidStatusTransitionException;
 import com.duoc.ms_vetcare_consultations.exception.ResourceNotFoundException;
+import com.duoc.ms_vetcare_consultations.messaging.ConsultationEventPublisher;
 import com.duoc.ms_vetcare_consultations.repository.ConsultationRepository;
 
 import org.springframework.security.access.AccessDeniedException;
@@ -19,11 +20,14 @@ import java.util.List;
 public class ConsultationService {
 
     private final ConsultationRepository repository;
+    private final ConsultationEventPublisher eventPublisher;
 
     public ConsultationService(
-            ConsultationRepository repository
+            ConsultationRepository repository,
+            ConsultationEventPublisher eventPublisher
     ) {
         this.repository = repository;
+        this.eventPublisher = eventPublisher;
     }
 
     public List<ConsultationResponse> findAll(
@@ -142,7 +146,16 @@ public class ConsultationService {
         Consultation saved =
                 repository.save(consultation);
 
-        return ConsultationResponse.fromEntity(saved);
+        ConsultationResponse response =
+                ConsultationResponse.fromEntity(saved);
+
+        /*
+         * Publica evento RabbitMQ después de persistir
+         * correctamente la consulta.
+         */
+        eventPublisher.publishCreated(response);
+
+        return response;
     }
 
     public ConsultationResponse updateStatus(
@@ -178,7 +191,16 @@ public class ConsultationService {
         Consultation updated =
                 repository.save(consultation);
 
-        return ConsultationResponse.fromEntity(updated);
+        ConsultationResponse response =
+                ConsultationResponse.fromEntity(updated);
+
+        /*
+         * Publica evento RabbitMQ cuando el cambio de estado
+         * fue válido y quedó guardado en PostgreSQL.
+         */
+        eventPublisher.publishStatusChanged(response);
+
+        return response;
     }
 
     private boolean isValidTransition(
